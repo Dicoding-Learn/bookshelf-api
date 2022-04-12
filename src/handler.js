@@ -13,7 +13,12 @@ const addBookHandler = (request, h) => {
     reading
   } = request.payload
 
-  if (name === undefined) {
+  const id = nanoid(16)
+  const finished = (pageCount === readPage)
+  const insertedAt = new Date().toISOString()
+  const updatedAt = insertedAt
+
+  if (!name) {
     const response = h.response({
       status: 'fail',
       message: 'Gagal menambahkan buku. Mohon isi nama buku'
@@ -30,11 +35,6 @@ const addBookHandler = (request, h) => {
     response.code(400)
     return response
   }
-
-  const id = nanoid(16)
-  const insertedAt = new Date().toISOString()
-  const updatedAt = insertedAt
-  const finished = (pageCount === readPage)
 
   const newBook = {
     id,
@@ -68,7 +68,7 @@ const addBookHandler = (request, h) => {
   }
 
   const response = h.response({
-    status: 'fail',
+    status: 'error',
     message: 'Buku gagal ditambahkan'
   })
   response.code(500)
@@ -78,57 +78,93 @@ const addBookHandler = (request, h) => {
 const getAllBooksHandler = (request, h) => {
   const { name, reading, finished } = request.query
 
-  let filteredBooks = books
-
   if (name !== undefined) {
-    filteredBooks = filteredBooks.filter((book) => book.name.toLowerCase().includes(name.toLowerCase()))
+    const book = books.filter(
+      (book) => book.name.toLowerCase().includes(name.toLowerCase())
+    )
+
+    const response = h.response({
+      status: 'success',
+      data: {
+        books: book.map((book) => ({
+          id: book.id,
+          name: book.name,
+          publisher: book.publisher
+        })
+        )
+      }
+    })
+    response.code(200)
+    return response
   }
 
   if (reading !== undefined) {
-    filteredBooks = filteredBooks.filter((book) => book.reading === !!Number(reading))
+    const book = books.filter(
+      (book) => Number(book.reading) === Number(reading)
+    )
+
+    const response = h.response({
+      status: 'success',
+      data: {
+        books: book.map((book) => ({
+          id: book.id,
+          name: book.name,
+          publisher: book.publisher
+        })
+        )
+      }
+    })
+    response.code(200)
+    return response
   }
 
   if (finished !== undefined) {
-    filteredBooks = filteredBooks.filter((book) => book.finished === !!Number(finished))
-  }
+    const book = books.filter(
+      (book) => Number(book.finished) === Number(finished)
+    )
 
-  const response = h.response({
-    status: 'success',
-    data: {
-      books: filteredBooks.map((book) => ({
-        id: book.id,
-        name: book.name,
-        publisher: book.publisher
-      }))
-    }
-  })
-  response.code(200)
-  return response
+    const response = h.response({
+      status: 'success',
+      data: {
+        books: book.map((book) => ({
+          id: book.id,
+          name: book.name,
+          publisher: book.publisher
+        })
+        )
+      }
+    })
+    response.code(200)
+    return response
+  }
 }
 
 const getBookByIdHandler = (request, h) => {
-  const { id } = request.params
-  const book = books.filter((b) => b.id === id)[0]
+  const { bookId } = request.params
+  const book = books.filter((book) => book.id === bookId)[0]
 
   if (book !== undefined) {
-    return {
+    const reponse = h.response({
       status: 'success',
       data: {
         book
       }
     }
+    )
+    reponse.code(200)
+    return reponse
   }
 
   const response = h.response({
     status: 'fail',
-    message: 'Buku gagal ditambahkan'
+    message: 'Buku tidak ditemukan'
   })
   response.code(404)
   return response
 }
 
 const editBookByIdHandler = (request, h) => {
-  const { id } = request.params
+  const { bookId } = request.params
   const {
     name,
     year,
@@ -137,33 +173,34 @@ const editBookByIdHandler = (request, h) => {
     publisher,
     pageCount,
     readPage,
-    finished,
     reading
   } = request.payload
 
+  const finished = pageCount === readPage
   const updatedAt = new Date().toISOString()
-  const index = books.findIndex((book) => book.id === id)
+  const index = books.findIndex((book) => book.id === bookId)
+
+  if (name === undefined) {
+    const response = h.response({
+      status: 'fail',
+      message: 'Gagal memperbarui buku. Mohon isi nama buku'
+    })
+
+    response.code(400)
+    return response
+  }
+
+  if (pageCount < readPage) {
+    const response = h.response({
+      status: 'fail',
+      message: 'Gagal memperbarui buku. readPage tidak boleh lebih besar dari pageCount'
+    })
+
+    response.code(400)
+    return response
+  }
 
   if (index !== -1) {
-    if (name !== undefined) {
-      const response = h.response({
-        status: 'fail',
-        message: 'Gagal memperbarui buku. Mohon isi nama buku'
-      })
-      response.code(400)
-      return response
-    }
-
-    if (pageCount < readPage) {
-      const response = h.response({
-        status: 'fail',
-        message: 'Gagal memperbarui buku. readPage tidak boleh lebih besar dari pageCount'
-      })
-      response.code(400)
-      return response
-    }
-
-    const finished = (pageCount === readPage)
     books[index] = {
       ...books[index],
       name,
@@ -173,8 +210,8 @@ const editBookByIdHandler = (request, h) => {
       publisher,
       pageCount,
       readPage,
-      finished,
       reading,
+      finished,
       updatedAt
     }
 
@@ -182,6 +219,7 @@ const editBookByIdHandler = (request, h) => {
       status: 'success',
       message: 'Buku berhasil diperbarui'
     })
+
     response.code(200)
     return response
   }
@@ -190,18 +228,18 @@ const editBookByIdHandler = (request, h) => {
     status: 'fail',
     message: 'Gagal memperbarui buku. Id tidak ditemukan'
   })
+
   response.code(404)
   return response
 }
 
 const deleteBookByIdHandler = (request, h) => {
-  const { id } = request.params
+  const { bookId } = request.params
 
-  const index = books.findIndex((book) => book.id === id)
+  const index = books.findIndex((book) => book.id === bookId)
 
   if (index !== -1) {
     books.splice(index, 1)
-
     const response = h.response({
       status: 'success',
       message: 'Buku berhasil dihapus'
